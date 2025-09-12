@@ -18,14 +18,13 @@ html,body{height:100%;margin:0;background:linear-gradient(180deg,#000 0%, #1a1a1
 .app{max-width:1200px;margin:20px auto;padding:18px;display:grid;grid-template-columns:260px 1fr 320px;gap:18px}
 .card{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,0.7)}
 h2{margin:0 0 12px 0;font-size:18px}
-/* Tables list */
 .tables{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .table-btn{padding:12px;border-radius:10px;background:var(--glass);border:1px solid rgba(255,255,255,0.05);cursor:pointer;color:#fff}
 .table-btn.active{outline:3px solid rgba(255,51,51,0.3);background:linear-gradient(90deg, rgba(255,51,51,0.08), transparent)}
 .table-btn small{display:block;color:var(--muted);}
-/* Products */
 .products{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .product{padding:10px;border-radius:10px;background:rgba(255,255,255,0.05);cursor:pointer;border:1px solid rgba(255,255,255,0.05)}
+.product.disabled{opacity:0.4;cursor:not-allowed}
 .product b{display:block}
 .center{display:flex;flex-direction:column}
 .order-list{margin-top:10px;border-radius:10px;overflow:auto;max-height:60vh;padding:8px;background:rgba(255,255,255,0.03)}
@@ -36,7 +35,6 @@ h2{margin:0 0 12px 0;font-size:18px}
 .btn{padding:10px 12px;border-radius:10px;border:none;cursor:pointer}
 .btn-primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff}
 .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.1);color:#fff}
-/* Sales */
 .summary{display:flex;flex-direction:column;gap:10px}
 .totals{display:flex;justify-content:space-between;align-items:center}
 .small-muted{color:var(--muted);font-size:13px}
@@ -49,11 +47,11 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
     <div class="card">
       <h2>Masalar (1-10)</h2>
       <div class="tables" id="tables"></div>
-      <div style="margin-top:12px;display:flex;gap:8px">
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
         <button id="clearAll" class="btn btn-ghost">Tüm verileri temizle</button>
         <button id="backupBtn" class="btn btn-ghost">Yedekle</button>
+        <button id="resetStock" class="btn btn-ghost">Stokları Sıfırla</button>
       </div>
-      <p class="small-muted" style="margin-top:10px"></p>
     </div>
 
     <div class="card center">
@@ -126,30 +124,28 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
         <div id="miniTableList" style="margin-top:8px"></div>
       </div>
     </div>
-
-    <footer></footer>
   </div>
 
   <script>
-    // --- Ürün tanımları (istediğin gibi düzenleyebilirsin) ---
-    const PRODUCTS = [
-      {id:'hb_classic', name:'Klasik Hamburger', price:200, cat:'burger'},
-      {id:'hb_cheese', name:'Cheeseburger', price:200, cat:'burger'},
-      {id:'hd_classic', name:'Hot Dog', price:200, cat:'hotdog'},
-      {id:'hd_chili', name:'Hot Dog 2', price:200, cat:'hotdog'},
-      {id:'kola', name:'Kola', price:30, cat:'icecek'},
-      {id:'ayran', name:'Ayran', price:20, cat:'icecek'}
+    // --- Ürün tanımları ---
+    const DEFAULT_PRODUCTS = [
+      {id:'hb_classic', name:'Klasik Hamburger', price:200, cat:'burger', stock:20},
+      {id:'hb_cheese', name:'Cheeseburger', price:200, cat:'burger', stock:20},
+      {id:'hd_classic', name:'Hot Dog', price:200, cat:'hotdog', stock:20},
+      {id:'hd_chili', name:'Hot Dog 2', price:200, cat:'hotdog', stock:20},
+      {id:'kola', name:'Kola', price:30, cat:'icecek', stock:30},
+      {id:'ayran', name:'Ayran', price:20, cat:'icecek', stock:30}
     ];
 
     // --- LocalStorage keys ---
-    const LS = {TABLES:'hh_tables', SALES:'hh_sales', ORDERS:'hh_orders'};
+    const LS = {TABLES:'hh_tables', SALES:'hh_sales', ORDERS:'hh_orders', PRODUCTS:'hh_products'};
 
     // --- State ---
     let currentTable = 1;
-    let orders = JSON.parse(localStorage.getItem(LS.ORDERS) || '{}'); // {tableNumber: [{productId, name, price, qty, note}] }
+    let orders = JSON.parse(localStorage.getItem(LS.ORDERS) || '{}');
     let sales = JSON.parse(localStorage.getItem(LS.SALES) || '[]');
+    let PRODUCTS = JSON.parse(localStorage.getItem(LS.PRODUCTS) || 'null') || DEFAULT_PRODUCTS;
 
-    // --- Init DOM ---
     const tablesEl = document.getElementById('tables');
     const productsEl = document.getElementById('products');
     const orderListEl = document.getElementById('orderList');
@@ -160,7 +156,11 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
     const miniTableListEl = document.getElementById('miniTableList');
     const currentTableTitle = document.getElementById('currentTableTitle');
 
-    function save() { localStorage.setItem(LS.ORDERS, JSON.stringify(orders)); localStorage.setItem(LS.SALES, JSON.stringify(sales)); }
+    function save() {
+      localStorage.setItem(LS.ORDERS, JSON.stringify(orders));
+      localStorage.setItem(LS.SALES, JSON.stringify(sales));
+      localStorage.setItem(LS.PRODUCTS, JSON.stringify(PRODUCTS));
+    }
 
     function renderTables(){
       tablesEl.innerHTML = '';
@@ -184,20 +184,28 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
       productsEl.innerHTML = '';
       const filtered = PRODUCTS.filter(p=> (filterCat==='all'||p.cat===filterCat) && p.name.toLowerCase().includes(filterText.toLowerCase()));
       filtered.forEach(p=>{
-        const el = document.createElement('div'); el.className='product';
-        el.innerHTML = `<b>${p.name}</b><div class="small-muted">${p.price} ₺</div>`;
-        el.onclick = ()=>{ addToOrder(p); }
+        const el = document.createElement('div');
+        el.className='product';
+        if(p.stock<=0) el.classList.add('disabled');
+        el.innerHTML = `<b>${p.name}</b><div class="small-muted">${p.price} ₺ — Stok: ${p.stock>0?p.stock:'Tükendi'}</div>`;
+        if(p.stock>0){
+          el.onclick = ()=>{ addToOrder(p); }
+        }
         productsEl.appendChild(el);
       });
     }
 
     function addToOrder(product){
+      if(product.stock<=0){ alert('Stokta yok!'); return; }
       const t = currentTable;
       orders[t] = orders[t] || [];
       const existing = orders[t].find(x=>x.id===product.id);
       if(existing) existing.qty++;
       else orders[t].push({id:product.id,name:product.name,price:product.price,qty:1});
-      save(); renderOrder(); renderTables();
+      // stok düş
+      const prod = PRODUCTS.find(p=>p.id===product.id);
+      prod.stock--;
+      save(); renderOrder(); renderTables(); renderProducts();
     }
 
     function renderOrder(){
@@ -207,42 +215,57 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
       if(list.length===0) orderListEl.innerHTML = '<div class="small-muted">Bu masada açık sipariş yok.</div>';
       list.forEach((it,idx)=>{
         const row = document.createElement('div'); row.className='order-item';
-        row.innerHTML = `<div><b>${it.name}</b><small> ${it.price}₺</small></div><div style="display:flex;gap:8px;align-items:center"><button class="qty-btn" data-action="dec">−</button><div>${it.qty}</div><button class="qty-btn" data-action="inc">+</button><button class="qty-btn" data-action="del">✕</button></div>`;
-        row.querySelector('[data-action="dec"]').onclick = ()=>{ if(it.qty>1){it.qty--; save(); renderOrder(); renderTables();} };
-        row.querySelector('[data-action="inc"]').onclick = ()=>{ it.qty++; save(); renderOrder(); renderTables(); };
-        row.querySelector('[data-action="del"]').onclick = ()=>{ orders[currentTable].splice(idx,1); if(orders[currentTable].length===0) delete orders[currentTable]; save(); renderOrder(); renderTables(); };
+        row.innerHTML = `<div><b>${it.name}</b><small> ${it.price}₺</small></div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="qty-btn" data-action="dec">−</button>
+            <div>${it.qty}</div>
+            <button class="qty-btn" data-action="inc">+</button>
+            <button class="qty-btn" data-action="del">✕</button>
+          </div>`;
+        row.querySelector('[data-action="dec"]').onclick = ()=>{
+          if(it.qty>1){ it.qty--; 
+            const prod = PRODUCTS.find(p=>p.id===it.id); prod.stock++; 
+            save(); renderOrder(); renderTables(); renderProducts(); 
+          }
+        };
+        row.querySelector('[data-action="inc"]').onclick = ()=>{
+          const prod = PRODUCTS.find(p=>p.id===it.id);
+          if(prod.stock>0){ it.qty++; prod.stock--; save(); renderOrder(); renderTables(); renderProducts(); }
+          else alert('Stok bitti!');
+        };
+        row.querySelector('[data-action="del"]').onclick = ()=>{
+          const prod = PRODUCTS.find(p=>p.id===it.id);
+          prod.stock += it.qty;
+          orders[currentTable].splice(idx,1);
+          if(orders[currentTable].length===0) delete orders[currentTable];
+          save(); renderOrder(); renderTables(); renderProducts();
+        };
         orderListEl.appendChild(row);
       });
       currentTotalEl.textContent = calcTableTotal(currentTable) + ' ₺';
       renderMiniTableList();
     }
 
-    // --- Payment flow ---
     document.getElementById('payBtn').addEventListener('click',()=>{
       const list = orders[currentTable] || [];
       if(!list || list.length===0){alert('Bu masada ödeme için sipariş yok.'); return;}
       const method = document.getElementById('paymentMethod').value;
       const amount = calcTableTotal(currentTable);
       if(!confirm(`Masa ${currentTable} için ${amount} ₺ ödeyecek misiniz?\nÖdeme türü: ${method}`)) return;
-      // kayıt
       const sale = {table:currentTable,amount,method,date:(new Date()).toISOString(),items:list};
       sales.push(sale);
-      // masayı temizle
       delete orders[currentTable];
       save(); renderOrder(); renderTables(); renderSales();
       alert('Ödeme kaydedildi. Teşekkürler!');
     });
 
-    // --- Sales UI ---
     function renderSales(){
-      // monthly total (bu ay)
       const now = new Date();
       const month = now.getMonth(); const year = now.getFullYear();
       const monthly = sales.filter(s=>{ const d=new Date(s.date); return d.getMonth()===month && d.getFullYear()===year; });
       const total = monthly.reduce((a,b)=>a+b.amount,0);
       monthlyTotalEl.textContent = total + ' ₺';
       salesCountEl.textContent = sales.length;
-      // breakdown
       const byMethod = monthly.reduce((acc,s)=>{ acc[s.method]=(acc[s.method]||0)+s.amount; return acc; },{});
       paymentBreakdownEl.innerHTML='';
       for(const k of Object.keys(byMethod)){
@@ -260,19 +283,17 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
 
     document.getElementById('resetMonth').addEventListener('click',()=>{
       if(!confirm('Bu ayın satışlarını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) return;
-      // sadece bu ayki satışları kaldır
       const now = new Date(); const month=now.getMonth(); const year=now.getFullYear();
       sales = sales.filter(s=>{ const d=new Date(s.date); return !(d.getMonth()===month && d.getFullYear()===year); });
       save(); renderSales(); alert('Bu ayın satışları silindi.');
     });
 
-    // --- Clear all data ---
     document.getElementById('clearAll').addEventListener('click',()=>{
-      if(!confirm('Tüm local verileri (siparişler + satışlar) silmek istiyor musunuz?')) return;
-      orders = {}; sales = []; save(); renderTables(); renderOrder(); renderSales(); alert('Tüm veriler silindi.');
+      if(!confirm('Tüm verileri (siparişler + satışlar + stoklar) silmek istiyor musunuz?')) return;
+      orders = {}; sales = []; PRODUCTS = JSON.parse(JSON.stringify(DEFAULT_PRODUCTS));
+      save(); renderTables(); renderOrder(); renderSales(); renderProducts(); alert('Tüm veriler silindi.');
     });
 
-    // --- Backup ---
     document.getElementById('backupBtn').addEventListener('click',()=>{
       const data = {orders,sales,products:PRODUCTS,exportedAt:new Date().toISOString()};
       const blob = new Blob([JSON.stringify(data, null, 2)],{type:'application/json'});
@@ -280,24 +301,26 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
       const a = document.createElement('a'); a.href=url; a.download = 'hh_backup_'+(new Date().toISOString().slice(0,10))+'.json'; a.click(); URL.revokeObjectURL(url);
     });
 
-    // --- Mini masa list ---
+    document.getElementById('resetStock').addEventListener('click',()=>{
+      if(!confirm('Stokları sıfırlamak istediğinizden emin misiniz?')) return;
+      PRODUCTS = JSON.parse(JSON.stringify(DEFAULT_PRODUCTS));
+      save(); renderProducts(); alert('Stoklar sıfırlandı.');
+    });
+
     function renderMiniTableList(){
-      miniTableListEl.innerHTML = '';
+      miniTableListEl.innerHTML='';
       for(let i=1;i<=10;i++){
-        const d = document.createElement('div'); d.style.marginBottom='6px';
-        const t = calcTableTotal(i);
-        d.innerHTML = `<strong>Masa ${i}</strong> <span class="small-muted"> — ${t} ₺</span>`;
-        miniTableListEl.appendChild(d);
+        const div = document.createElement('div');
+        const total = calcTableTotal(i);
+        div.textContent = `Masa ${i}: ${total>0? total+' ₺ açık':''}`;
+        miniTableListEl.appendChild(div);
       }
     }
 
-    // --- Search & filter ---
-    document.getElementById('searchProduct').addEventListener('input',(ev)=>{ renderProducts(ev.target.value, document.getElementById('categoryFilter').value); });
-    document.getElementById('categoryFilter').addEventListener('change',(ev)=>{ renderProducts(document.getElementById('searchProduct').value, ev.target.value); });
+    document.getElementById('searchProduct').addEventListener('input',(e)=>{renderProducts(e.target.value, document.getElementById('categoryFilter').value)});
+    document.getElementById('categoryFilter').addEventListener('change',(e)=>{renderProducts(document.getElementById('searchProduct').value,e.target.value)});
 
-    // --- On load ---
-    renderTables(); renderProducts(); renderOrder(); renderSales();
-
+    renderTables(); renderOrder(); renderSales(); renderProducts();
   </script>
 </body>
 </html>
