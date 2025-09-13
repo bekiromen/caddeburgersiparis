@@ -109,6 +109,17 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
         </div>
       </div>
 
+      <!-- Günlük satış kısmı -->
+      <div class="totals" style="margin-top:10px">
+        <div>
+          <div class="small-muted">Bugün Toplam</div>
+          <div style="font-size:20px;font-weight:700" id="dailyTotal">0 ₺</div>
+        </div>
+        <div style="text-align:right">
+          <button id="resetDay" class="btn btn-ghost">Günü Sıfırla</button>
+        </div>
+      </div>
+
       <div style="margin-top:10px;display:flex;gap:8px">
         <button id="resetMonth" class="btn btn-ghost">Ayı Sıfırla</button>
         <button id="showLog" class="btn btn-ghost">Satış Günlüğünü Göster</button>
@@ -127,7 +138,6 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
   </div>
 
   <script>
-    // --- Ürün tanımları ---
     const DEFAULT_PRODUCTS = [
       {id:'hb_classic', name:'Klasik Hamburger', price:200, cat:'burger', stock:20},
       {id:'hb_cheese', name:'Cheeseburger', price:200, cat:'burger', stock:20},
@@ -137,10 +147,8 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
       {id:'ayran', name:'Ayran', price:20, cat:'icecek', stock:30}
     ];
 
-    // --- LocalStorage keys ---
     const LS = {TABLES:'hh_tables', SALES:'hh_sales', ORDERS:'hh_orders', PRODUCTS:'hh_products'};
 
-    // --- State ---
     let currentTable = 1;
     let orders = JSON.parse(localStorage.getItem(LS.ORDERS) || '{}');
     let sales = JSON.parse(localStorage.getItem(LS.SALES) || '[]');
@@ -155,6 +163,7 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
     const paymentBreakdownEl = document.getElementById('paymentBreakdown');
     const miniTableListEl = document.getElementById('miniTableList');
     const currentTableTitle = document.getElementById('currentTableTitle');
+    const dailyTotalEl = document.getElementById('dailyTotal');
 
     function save() {
       localStorage.setItem(LS.ORDERS, JSON.stringify(orders));
@@ -202,7 +211,6 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
       const existing = orders[t].find(x=>x.id===product.id);
       if(existing) existing.qty++;
       else orders[t].push({id:product.id,name:product.name,price:product.price,qty:1});
-      // stok düş
       const prod = PRODUCTS.find(p=>p.id===product.id);
       prod.stock--;
       save(); renderOrder(); renderTables(); renderProducts();
@@ -262,10 +270,17 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
     function renderSales(){
       const now = new Date();
       const month = now.getMonth(); const year = now.getFullYear();
+      const today = now.toISOString().slice(0,10);
+
       const monthly = sales.filter(s=>{ const d=new Date(s.date); return d.getMonth()===month && d.getFullYear()===year; });
       const total = monthly.reduce((a,b)=>a+b.amount,0);
       monthlyTotalEl.textContent = total + ' ₺';
       salesCountEl.textContent = sales.length;
+
+      const daily = sales.filter(s=> s.date.slice(0,10)===today);
+      const dailyTotal = daily.reduce((a,b)=>a+b.amount,0);
+      dailyTotalEl.textContent = dailyTotal + ' ₺';
+
       const byMethod = monthly.reduce((acc,s)=>{ acc[s.method]=(acc[s.method]||0)+s.amount; return acc; },{});
       paymentBreakdownEl.innerHTML='';
       for(const k of Object.keys(byMethod)){
@@ -286,6 +301,13 @@ footer{grid-column:1/-1;margin-top:12px;text-align:center;color:var(--muted);fon
       const now = new Date(); const month=now.getMonth(); const year=now.getFullYear();
       sales = sales.filter(s=>{ const d=new Date(s.date); return !(d.getMonth()===month && d.getFullYear()===year); });
       save(); renderSales(); alert('Bu ayın satışları silindi.');
+    });
+
+    document.getElementById('resetDay').addEventListener('click',()=>{
+      if(!confirm('Bugünün satışlarını silmek istediğinizden emin misiniz?')) return;
+      const today = (new Date()).toISOString().slice(0,10);
+      sales = sales.filter(s=> s.date.slice(0,10)!==today);
+      save(); renderSales(); alert('Bugünün satışları silindi.');
     });
 
     document.getElementById('clearAll').addEventListener('click',()=>{
